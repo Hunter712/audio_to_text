@@ -1,1 +1,2 @@
-# audio_to_text
+libs to install:
+pip install aiogram SpeechRecognition
