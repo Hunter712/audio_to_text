@@ -1,9 +1,11 @@
 import asyncio, os, speech_recognition as sr
 from aiogram import Bot, Dispatcher, F
 import uuid
+import os
 
 # Initialize Bot and Dispatcher
-bot = Bot("")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 rec = sr.Recognizer()
 
@@ -40,6 +42,8 @@ async def voice_to_text(m):
             await status_msg.edit_text(t)
     except Exception:
         # Handle recognition errors (e.g., silence or no internet)
+        import traceback
+        traceback.print_exc()
         await m.answer("Recognition error")
     finally:
         for f in [input_file, output_wav]:
