@@ -1,22 +1,23 @@
-import asyncio, os, speech_recognition as sr
-from aiogram import Bot, Dispatcher, F
-import uuid
+import asyncio
 import os
+import uuid
+from aiogram import Bot, Dispatcher, F
+from groq import Groq
 
 # Initialize Bot and Dispatcher
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-rec = sr.Recognizer()
 
 
 @dp.message(F.voice | F.video | F.video_note)
 async def voice_to_text(m):
-    status_msg = await m.reply("Proccessing.....\n Pay attention that you can transcribe <=60 sec audio or <=20mb video")
+    status_msg = await m.reply("Processing.....")
 
     uid = str(uuid.uuid4())
     input_file = f"input_{uid}"
-    output_wav = f"audio_{uid}.wav"
+    output_mp3 = f"audio_{uid}.mp3"
 
 
     # Get file info and download the .ogg file from Telegram servers
@@ -30,26 +31,26 @@ async def voice_to_text(m):
     file = await bot.get_file(file_id)
     await bot.download_file(file.file_path, input_file)
 
-    # Convert OGG to WAV using ffmpeg (Google API requires WAV/FLAC)
-    os.system(f"ffmpeg -i {input_file} -vn -ac 1 -ar 16000 {output_wav} -y -loglevel quiet")
-
+    os.system(f"ffmpeg -i {input_file} -vn -acodec libmp3lame -ac 1 -ar 16000 -ab 24k {output_mp3} -y -loglevel quiet")
 
     try:
-        # Open the converted file and record audio data
-        with sr.AudioFile(output_wav) as s:
-            # Send audio data to Google Speech Recognition API
-            t = rec.recognize_google(rec.record(s), language="ru-RU,en-US")
-            await status_msg.edit_text(t)
-    except Exception:
-        # Handle recognition errors (e.g., silence or no internet)
-        import traceback
-        traceback.print_exc()
-        await m.answer("Recognition error")
+      with open(output_mp3, "rb") as audio_file:
+        transcription = groq_client.audio.transcriptions.create(
+          model="whisper-large-v3-turbo",
+          file=audio_file,
+          language="ru",
+          prompt="Текст может содержать как русский, так и украинский или английский языки. Пиши точно, расставляй знаки препинания."
+        )
+
+      text = transcription.text.strip()
+      await status_msg.edit_text(text if text else "Can't recognize text.")
+
+    except Exception as e:
+        await status_msg.edit_text(f"Recognition error {e}")
     finally:
-        for f in [input_file, output_wav]:
+        for f in [input_file, output_mp3]:
             if os.path.exists(f): os.remove(f)
 
 
 if __name__ == "__main__":
-    # Start the polling process
     asyncio.run(dp.start_polling(bot))
